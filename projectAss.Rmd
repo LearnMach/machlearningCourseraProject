@@ -1,0 +1,91 @@
+## Course Write Up for Practical Machine Learning
+
+I am going to use the caret package as discussed in the class to build up my prediction model.I shall also be using randomForest package. I like using the seed value of 1729, Ramanujan's number to ensure the reproducibility of the results.
+The data given asks us to train a model to predict the activities of the individual.
+
+```{r echo=FALSE, message=FALSE}
+set.seed(1729)
+options(warn=-1)
+library(Hmisc)
+library(caret)
+library(randomForest)
+library(foreach)
+library(doParallel)
+```
+
+Reading the data to train the model. Also, we add NAs where the data is invalid.
+
+```{r}
+trainSet <- read.csv("data/pml-training.csv", na.strings=c("#DIV/0!") )
+questions <- read.csv("data/pml-testing.csv", na.strings=c("#DIV/0!") )
+```
+
+
+```{r}
+for(i in c(8:ncol(trainSet)-1)) {trainSet[,i] = as.numeric(as.character(trainSet[,i]))}
+
+for(i in c(8:ncol(questions)-1)) {questions[,i] = as.numeric(as.character(questions[,i]))}
+```
+
+Feature Selection from the training data. I did not use imputation, rather selected the features with complete information.
+
+```{r}
+vars <- colnames(trainSet[colSums(is.na(trainSet)) == 0])[-(1:7)]
+df1 <- trainSet[vars]
+vars
+```
+
+df1 defines our modelling data. Let's divide our data into training and testing set. Here I use 75-25 division to create a data partition.
+
+```{r}
+index <- createDataPartition(y=df1$classe, p=0.75, list=FALSE )
+training <- df1[index,]
+testing <- df1[-index,]
+```
+
+Now we run the code to build a random forest model with n=150 trees. To enhance the speed of the process, we use the doParallel package.
+
+```{r}
+registerDoParallel()
+x <- training[-ncol(training)]
+y <- training$classe
+
+rf <- foreach(ntree=rep(150, 6), .combine=randomForest::combine, .packages='randomForest') %dopar% {
+randomForest(x, y, ntree=ntree) 
+}
+```
+
+Testing the performance of the model.
+
+```{r}
+predictions1 <- predict(rf, newdata=training)
+confusionMatrix(predictions1,training$classe)
+
+
+predictions2 <- predict(rf, newdata=testing)
+confusionMatrix(predictions2,testing$classe)
+```
+
+## Submission of results
+The confusion matrix tells us the accuracy of the model. The accuracy is very high, which gives me the confidence to submit all my answers. I did not try any other model due to lack of time and also the answers that I got from this model were all correct.
+
+Preparing the answers for submission. The code is provided online on the course page.
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+
+x <- questions
+x <- x[vars[vars!='classe']]
+answers <- predict(rf, newdata=x)
+
+answers
+
+pml_write_files(answers)
+```
